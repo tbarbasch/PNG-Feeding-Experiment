@@ -1,0 +1,45 @@
+PNGdata<-read.csv(file.choose()) # import datasheet for multivariate model
+
+set.seed(14) # set seed
+library(MCMCglmm)
+
+
+## specify prior distribution
+prior = list(#B=list(mu = rep(0,39), V = diag(39) * ## B = fixed effects priors
+  #  + (1 + pi^2/3)), # default is usually used, with 0 mean and large variance making it weakly informative, 
+  # I have suppressed an example for a weakly informative prior for the probability scale with a logit link (for example if looking at probability of hatching, as in Buston & Elith 2011)
+  R=list(list(V=diag(c(1,0.01,0.01,0.01,1,1,1),7,7),nu=1.002,fix = c(F,T,T,T,F,F,F))), ## R specifies the prior for the residual variance 
+  ## V = the variance at the limit and nu = degree of belief parameter 
+  ## V = 1*I is equivalent to the inverse gamma with shape and scale = nu/2
+  ## the variance of FSL,MSL and anemone area are fixed at a small value (zero not allowed) because there is no within-group variance in these traits (a single measurement across the study period)
+  G=list(G1=list(V=diag(7),nu=7, alpha.mu=rep(0,7),alpha.V=diag(25^2,7,7))))## G specifies prior for the random variance
+## V = 1 and nu = 7 (where 7 is the number of variables) is a flat prior for the variances; nu = 1.002 would be inverse gamma with shape = scale = 0.001; ## alpha.mu is the parameter expanded mean, alpha.V is the parameter expanded variance
+
+
+
+multivarmod.full<-MCMCglmm(cbind(cbind(Eggs.Hatched,Eggs.Laid-Eggs.Hatched), ## response variable 1: proportion of eggs that survive to hatching, fit with a multinomial2 (binomial) error distribution, with cbind(# successes, # failures)
+                                 #probhatch, # response variable 2: probability of hatching eggs (0 or 1) fit with a categorical (binomial) error distribution. This variable was ultimately excluded from the analysis
+                                 #NumOfFish.2, # response variable 3: number of resident fish. This variable was ultimately excluded from the analysis
+                                 FSL, # response variable 4: Female Standard Length
+                                 MSL, # response variable 5: Male Standard Length
+                                 anemone.area, # response variable 6: anemone area
+                                 M.tend, # response variable 6: male time tending
+                                 F.tend, # response variable 7: female time tending
+                                 #Clutches.Laid, # response variable 6: number of clutches laid, fit with a poisson error distribution. This variable was ultimately excluded from the analysis
+                                 Eggs.Laid2)~ # response variable 7: number of eggs laid, fit with a poisson error distribution
+                             trait-1+ # Fits an intercept to each response variable (trait) and does not fit a global intercept (-1)
+                             trait:Fed1.0+ # Fits the effect of treatment on each response variable (trait)
+                             trait:as.factor(Month)+ # Fits the effect of month on each response variable (trait)
+                             trait:Fed1.0:as.factor(Month)+ # Fits the interaction between treatment and month
+                             at.level(trait,5):as.factor(Clutch.Age)+at.level(trait,6):as.factor(Clutch.Age), # fits the effect of clutch age, but only for male tending and female tending (traits 4 and 5)
+                           data=PNGdata,prior=prior, # specifies dataset and prior distributions
+                           random = ~us(trait):Anemone.ID,rcov = ~us(trait):units, # fits random intercept of Anemone ID for each response variable and specifies an unstructured covariance matrix
+                           # nitt=5040000,thin=1000,burnin=40000, # number of iterations, thinning (only every 1000 sample is kept), and burnin (number of iterations discarded from the beginning)
+                           # verbose=TRUE, displays the iterations as they are completed
+                           family=c("multinomial2","gaussian","gaussian","gaussian","gaussian","gaussian","poisson")) # specifies the error distributions for each response variable
+
+summary(multivarmod.full) # display model summary
+saveRDS(multivarmod.full,file="multivarmod.MSL.new.rds") # save model output so you don't have to run the model each time the script is closed
+
+multivarmod.MSL<-readRDS("C:/Users/tbarb/Documents/Spring_2020/multivarmod.MSL.new.03242020.rds") # read the saved model output
+summary(multivarmod.MSL) # display model summary
