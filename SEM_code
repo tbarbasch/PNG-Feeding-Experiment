@@ -1,0 +1,228 @@
+# load necessary packages
+library(lme4)
+library(MCMCglmm)
+library(piecewiseSEM)
+library(lavaan)
+library(nlme)
+
+# import data
+PNGdata<-read.csv("C:/Users/tbarb/Documents/Fall_2017/Feeding_experiment_2017/Feeding_experiment_SEM.csv")
+# create subset of data for month 1
+PNGdata2<-subset(PNGdata,Month==1)
+# create subset of data for first clutch laid each month (this is so there is only one measurement for anemone area, FSL, and MSL for each anemone/group ID)
+PNGdata2<-subset(PNGdata2,Month.Clutch==1)
+
+# create subset of data for late stage of clutch development (this is for measures of parental care, which we restricted to day 6/7 of development)
+PNGdata4<-subset(PNGdata,Clutch.Age==6|Clutch.Age==7)
+
+# scale continuous variables anemone area, FSL, MSL, and male and female tending so that coefficients are comparable
+PNGdata4$M.tend<-scale(PNGdata5$M.tend)
+PNGdata4$F.tend<-scale(PNGdata5$F.tend)
+PNGdata4$anemone.area<-scale(PNGdata5$anemone.area)
+PNGdata4$FSL<-scale(PNGdata5$FSL)
+PNGdata4$MSL<-scale(PNGdata5$MSL)
+PNGdata5<-PNGdata4
+PNGdata6<-subset(PNGdata5,Month.Clutch==1)
+
+
+
+
+### FSL and MSL
+# fit null model where anemone area predicts FSL and FSL predicts MSL
+mod_sem_null<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                   lm(MSL~FSL,data=PNGdata6))
+summary(mod_sem_null)
+
+# fit additional pathway where anemone area predicts both FSL and MSL
+mod_sem_group<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                    lm(MSL~FSL + anemone.area,data=PNGdata6))
+
+# compare models with and without anemone area as a predictor of MSL using chi-squared difference tests
+anova(mod_sem_null,mod_sem_group) # including anemone area as predictor of MSL does not significantly improve fit
+
+
+
+
+
+### Number of eggs laid
+# fit null model with no predictors for number of eggs laid
+mod_sem_FSL<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                  #glm(Eggs.Laid~anemone.area,data=PNGdata5,family="poisson"),
+                  lm(MSL~FSL,data=PNGdata6),
+                  glm(Eggs.Laid~1,data=PNGdata4,family="poisson"))
+
+# sequentially add FSL, MSL, and anemone area as predictors of eggs laid and compare fits as each additional pathway is added
+mod_sem_eggs<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                   lm(MSL~FSL,data=PNGdata6),
+                   glmer(Eggs.Laid~FSL+(1|Anemone.ID),data=PNGdata4,family="poisson"))
+anova(mod_sem_FSL,mod_sem_eggs) # including fsl as predictor of eggs laid significantly improves fit
+
+mod_sem_null2<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                    lm(MSL~FSL,data=PNGdata6),
+                    glmer(Eggs.Laid~FSL+anemone.area+(1|Anemone.ID),data=PNGdata4,family="poisson"))
+anova(mod_sem_eggs,mod_sem_null2) # including anemone area significantly improves fit
+
+mod_sem_null3<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                    lm(MSL~FSL,data=PNGdata6),
+                    glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"))
+anova(mod_sem_null2,mod_sem_null3) # including MSL as predictor of eggs laid significantly improves fit
+
+mod_eggs<-psem(lm(FSL~anemone.area, data=PNGdata6),
+               lm(MSL~FSL,data=PNGdata6),
+               glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson")) # best model includes FSL, anemone area and MSL as predictors of number of eggs laid
+
+
+
+
+
+### Male tending
+# include null model with no predictors of male time tending
+mod_Mtend<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                    lm(MSL~FSL,data=PNGdata6),
+                    glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                    lm(M.tend~1, data=PNGdata4))
+# sequentially add upstream predictors (anemone area, FSL, MSL, and eggs laid) to determine best fit model
+mod_Mtend2<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                    lm(MSL~FSL,data=PNGdata6),
+                    glmer(Eggs.Laid~FSL+anemone.area+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                    lm(M.tend~Eggs.Laid, data=PNGdata4))
+anova(mod_Mtend,mod_Mtend2) # adding eggs laid as predictor of Mtend significantly improves fit
+
+mod_Mtend4<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+(1|Anemone.ID), data=PNGdata4))
+anova(mod_Mtend2,mod_Mtend4) # including MSL as predictor of tending significantly improves fit
+mod_Mtend5<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+(1|Anemone.ID), data=PNGdata4))
+anova(mod_Mtend4,mod_Mtend5) # including anemone area as predictor of male tending significantly improves fit
+
+mod_Mtend6<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4))
+anova(mod_Mtend5,mod_Mtend6) # including FSL as predictor of male tending significantly improves fit
+
+
+
+
+
+### Female tending
+# start with null model with no predictors of female tending
+mod_Ftend<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                lm(MSL~FSL,data=PNGdata6),
+                glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+               lm(F.tend~1,data=PNGdata4))
+
+# sequentially add upstream predictors eggs laid, FSL, MSL, and anemone area
+mod_tend2<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                lm(MSL~FSL,data=PNGdata6),
+                glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4))
+anova(mod_Ftend,mod_tend2) # including eggs laid significantly improves fit
+mod_tend3<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                lm(MSL~FSL,data=PNGdata6),
+                glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                lmer(F.tend~Eggs.Laid+FSL+(1|Anemone.ID),data=PNGdata4))
+anova(mod_tend2,mod_tend3) # FSL does not significantly improve fit
+mod_tend4<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                lm(MSL~FSL,data=PNGdata6),
+                glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                lmer(F.tend~Eggs.Laid+anemone.area+(1|Anemone.ID),data=PNGdata4))
+anova(mod_tend2,mod_tend4) # anemone area does not significantly improve fit
+mod_tend5<-psem(lm(FSL~anemone.area, data=PNGdata2),
+                lm(MSL~FSL,data=PNGdata2),
+                glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                lmer(F.tend~Eggs.Laid+MSL+(1|Anemone.ID),data=PNGdata4))
+anova(mod_tend2,mod_tend5) # MSL does not significantly improve fit
+
+
+
+
+
+### embryo survival (Prop.hatch)
+# start wit null model with no predictors of proportion hatched
+mod_tend_null2<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                     lm(MSL~FSL,data=PNGdata6),
+                     glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                     lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                     lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                     glm(Prop.hatch~1,data=PNGdata4,family="binomial"))
+# sequentially add upstream predictors male tending, female tending, FSL, MSL, and anemone area
+mod_hatch<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                lm(MSL~FSL,data=PNGdata6),
+                glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                glmer(Prop.hatch~M.tend+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+anova(mod_tend_null2,mod_hatch) # male tending significantly improves fit
+mod_hatch2<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                 lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                 glmer(Prop.hatch~M.tend+F.tend+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+anova(mod_hatch,mod_hatch2) # female tending does not significantly improve fit
+
+# compare models with male tending as predictor of embryo survival (same as mod_hatch)
+mod_hatch_null<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                     lm(MSL~FSL,data=PNGdata6),
+                     glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                     lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                     lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                     glmer(Prop.hatch~M.tend+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+mod_hatch3<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                 lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                 glmer(Prop.hatch~M.tend+Eggs.Laid+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+anova(mod_hatch_null,mod_hatch3) # including eggs laid as predictor of survival does not improve fit
+mod_hatch4<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                 lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                 glmer(Prop.hatch~M.tend+anemone.area+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+anova(mod_hatch_null,mod_hatch4) # including anemone area as predictor of embryo survival does not significantly improve fit
+mod_hatch5<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                 lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                 glmer(Prop.hatch~M.tend+FSL+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+anova(mod_hatch_null,mod_hatch5) # including FSL does not significantly improve fit
+mod_hatch6<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                 lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                 glmer(Prop.hatch~M.tend+MSL+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+anova(mod_hatch_null,mod_hatch6) # including MSL as predictor of embryo survival does not significantly improve fit
+mod_hatch7<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                 lm(MSL~FSL,data=PNGdata6),
+                 lmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata4,family="poisson"),
+                 lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata4),
+                 lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata4),
+                 glmer(Prop.hatch~M.tend+FSL+(1|Anemone.ID),data=PNGdata4,family="binomial"))
+anova(mod_hatch_null,mod_hatch7) # including FSL as predictor of prop hatched does NOT improve fit
+summary(mod_hatch6)
+
+## include correlated error between Male and Female tending (no hypothesized causal direction between male and female tending)
+mod_final<-psem(lm(FSL~anemone.area, data=PNGdata6),
+                             lm(MSL~FSL,data=PNGdata6),
+                             glmer(Eggs.Laid~FSL+anemone.area+MSL+(1|Anemone.ID),data=PNGdata5,family="poisson"),
+                             lmer(M.tend~Eggs.Laid+MSL+anemone.area+FSL+(1|Anemone.ID), data=PNGdata5),
+                             lmer(F.tend~Eggs.Laid+(1|Anemone.ID),data=PNGdata5),
+                             glmer(Prop.hatch~M.tend+(1|Anemone.ID),data=PNGdata5,family="binomial"),
+                             M.tend%~~%F.tend)
+AIC(mod_final)
+AIC(mod_hatch6)
+summary(mod_final)
